@@ -18,6 +18,24 @@ También puedes **crear un aparato a mano** o **ver un ejemplo** sin API key.
 
 ## Usarlo
 
+Hay dos versiones con la misma interfaz:
+
+| | Lectura de la foto | Descarga |
+| --- | --- | --- |
+| **En claude.ai** | Con tu cuenta de Claude, sin API key | Un ZIP con los XML |
+| **Web normal** (GitHub Pages o tu ordenador) | Con tu API key de Anthropic | Los XML directamente; también admite PDF |
+
+### En claude.ai
+
+Canalia está publicada como página de claude.ai: <https://claude.ai/artifact/9STLEqs1iHisZoPBKbHEXE>
+
+- Al pulsar «Leer con Claude», claude.ai pide permiso la primera vez y la lectura gasta el uso de tu propio plan de Claude.
+- El enlace es privado hasta que su dueño lo comparte desde el menú *Share* de la página. Cada persona que lo abra lee con su propia cuenta.
+- Las páginas de claude.ai no pueden guardar archivos `.xml`, así que la descarga es un ZIP con los XML dentro.
+- Solo admite fotos o capturas (JPG, PNG, WebP), no PDF. claude.ai reduce cada imagen, así que Canalia corta las fotos grandes en tiras que se solapan para que la letra pequeña se siga leyendo.
+
+Para regenerar esa página después de cambiar el código: `npm run build:claude` crea `dist-claude/canalia.html`, que se vuelve a publicar en la misma dirección.
+
 ### En la web
 
 El workflow `.github/workflows/deploy.yml` publica la app en GitHub Pages cada vez que se hace push a `main`. Para activarlo: en GitHub, *Settings → Pages → Build and deployment → Source: GitHub Actions*.
@@ -31,6 +49,7 @@ npm install
 npm run dev      # abre http://localhost:5173
 npm test         # pruebas del generador XML y de la lectura con IA
 npm run build    # genera la web estática en dist/
+npm run build:claude  # genera la página de claude.ai en dist-claude/canalia.html
 ```
 
 ### API key de Anthropic
@@ -94,7 +113,10 @@ El XML sigue la estructura de los fixture types que exporta una grandMA2 3.9.60.
 | --- | --- |
 | `src/catalog.ts` | Catálogo de atributos de grandMA2 (atributo, feature, preset type, nombres). |
 | `src/ma2xml.ts` | Generador y validación del XML de grandMA2. |
-| `src/extract.ts` | Lectura de la foto con Claude (visión + salida JSON estructurada). |
+| `src/reading.ts` | Instrucciones de lectura y limpieza de la respuesta de la IA (comunes a las dos versiones). |
+| `src/extract.ts` | Lectura con la API de Anthropic y tu API key (versión web). |
+| `src/claudeRuntime.ts` | Lectura con tu cuenta de Claude y descarga en ZIP (versión de claude.ai). |
+| `src/zip.ts` | ZIP sin compresión para la descarga en claude.ai. |
 | `src/image.ts` | Redimensiona las fotos en el navegador antes de enviarlas. |
 | `src/main.ts`, `src/styles.css` | Interfaz web. |
 | `public/logo.svg`, `docs/banner.svg` | Logo y banner. |

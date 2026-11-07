@@ -3,7 +3,7 @@ import { extractFixture, MODEL } from './extract';
 import type { SourceFile } from './image';
 
 const photo: SourceFile = {
-  id: 'f1', name: 'manual.jpg', kind: 'image', mediaType: 'image/jpeg', data: 'AAAA', previewUrl: null, bytes: 3,
+  id: 'f1', name: 'manual.jpg', kind: 'image', mediaType: 'image/jpeg', data: 'AAAA', blob: new Blob(['x']), previewUrl: null, bytes: 3,
 };
 
 const answer = {
@@ -98,9 +98,9 @@ describe('extractFixture', () => {
     expect(color.defaultValue).toBe(255);
     expect(color.ranges).toEqual([{ from: 0, to: 9, name: 'White' }, { from: 10, to: 20, name: 'Red' }]);
     expect(result.notes).toEqual(['El canal 4 está borroso.']);
-    expect(result.usage.inputTokens).toBe(2000);
-    expect(result.usage.outputTokens).toBe(1000);
-    expect(result.usage.costUsd).toBeCloseTo(0.028, 5);
+    expect(result.usage!.inputTokens).toBe(2000);
+    expect(result.usage!.outputTokens).toBe(1000);
+    expect(result.usage!.costUsd).toBeCloseTo(0.028, 5);
   });
 
   it('avisa cuando la respuesta se corta por longitud', async () => {

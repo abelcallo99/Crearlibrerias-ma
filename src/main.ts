@@ -1,10 +1,20 @@
 import './styles.css';
 import { ATTRIBUTES, ATTRIBUTE_GROUPS, getAttribute } from './catalog';
 import { demoFixture } from './demo';
-import type { ExtractResult } from './extract';
+import logoSvg from '../public/logo.svg?raw';
+import { connectClaude, readWithClaude, type ClaudeRuntime } from './claudeRuntime';
+import type { ReadResult } from './reading';
+import { createZip } from './zip';
 import { prepareFile, type SourceFile } from './image';
 import { footprint, generateFixtureXml, validateMode, type Issue } from './ma2xml';
 import { emptyChannel, emptyFixture, type BeamType, type Channel, type Fixture } from './model';
+
+/**
+ * Versión de claude.ai (`vite build --mode claude`): lee con la cuenta de
+ * Claude de quien abre la página y entrega ZIP. La versión web usa la API key.
+ */
+const IN_CLAUDE = import.meta.env.MODE === 'claude';
+const LOGO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(logoSvg)}`;
 
 // ---------------------------------------------------------------------------
 // Utilidades de DOM
@@ -34,6 +44,10 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...
     el.append(child);
   }
   return el;
+}
+
+function appendAll(el: Element, ...children: Child[]): void {
+  el.append(...children.filter((c): c is Node | string => c !== null && c !== undefined && c !== false));
 }
 
 /** Sustituye el contenido de un elemento ignorando los hijos vacíos. */
@@ -103,9 +117,11 @@ const state = {
   busy: false,
   progress: '',
   error: '',
-  lastRun: null as ExtractResult['usage'] | null,
+  lastRun: null as ReadResult['usage'],
   abort: null as AbortController | null,
   previewMode: -1,
+  claude: null as ClaudeRuntime | null,
+  exportMessage: '',
 };
 
 function persistDraft(): void {
@@ -118,26 +134,29 @@ function persistDraft(): void {
 
 function shell(): void {
   const app = $('app');
-  app.append(
+  appendAll(app,
     h('header', { class: 'top' },
       h('div', { class: 'wrap' },
         h('div', { class: 'brand' },
-          h('img', { src: './logo.svg', alt: '' }),
+          h('img', { src: LOGO, alt: '' }),
           h('div', {},
             h('div', { class: 'brand-name' }, 'Canalia'),
             h('div', { class: 'brand-tag' }, 'Librerías grandMA2 desde una foto del manual'),
           ),
         ),
         h('div', { class: 'spacer' }),
-        h('button', { class: 'key-chip', id: 'key-chip', type: 'button', onclick: openKeyDialog }),
+        h('button', { class: 'key-chip', id: 'key-chip', type: 'button', onclick: IN_CLAUDE ? undefined : openKeyDialog }),
       ),
     ),
     h('main', { class: 'wrap' },
       h('section', { class: 'hero' },
         h('h1', {}, 'De la tabla DMX del manual a tu ', h('em', {}, 'grandMA2'), '.'),
         h('p', {},
-          'Haz una foto a la tabla de canales DMX, revisa lo que ha leído la IA y descarga el fixture type en XML ',
-          'listo para importar en la consola o en grandMA2 onPC.'),
+          IN_CLAUDE
+            ? 'Haz una foto a la tabla de canales DMX, Claude la lee con tu cuenta, revisas los canales y descargas '
+              + 'el fixture type (un ZIP con los XML) listo para importar en la consola o en grandMA2 onPC.'
+            : 'Haz una foto a la tabla de canales DMX, revisa lo que ha leído la IA y descarga el fixture type en XML '
+              + 'listo para importar en la consola o en grandMA2 onPC.'),
       ),
       h('section', { class: 'step', id: 'step-photo' }),
       h('section', { class: 'step', id: 'step-review' }),
@@ -146,8 +165,30 @@ function shell(): void {
         'Canalia no está afiliada a MA Lighting. grandMA2 es una marca de MA Lighting Technology GmbH. ',
         'Revisa siempre el fixture type en el Fixture Type Editor antes de usarlo en un show.'),
     ),
-    keyDialog(),
+    h('div', { class: 'confirm-bar', id: 'confirm-bar', role: 'dialog', 'aria-live': 'polite', hidden: true }),
+    IN_CLAUDE ? null : keyDialog(),
   );
+}
+
+/** Confirmación dentro de la página (claude.ai no muestra confirm()). */
+function askConfirm(text: string, yesLabel: string, onYes: () => void): void {
+  const bar = $('confirm-bar');
+  const close = () => {
+    bar.hidden = true;
+    fill(bar);
+  };
+  const yes = h('button', { class: 'btn primary', type: 'button', onclick: () => { close(); onYes(); } }, yesLabel);
+  fill(bar,
+    h('div', { class: 'wrap confirm-inner' },
+      h('span', {}, text),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Cancelar'),
+        yes,
+      ),
+    ),
+  );
+  bar.hidden = false;
+  yes.focus();
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +237,13 @@ function openKeyDialog(): void {
 
 function renderKeyChip(): void {
   const chip = $('key-chip');
+  if (IN_CLAUDE) {
+    const ok = Boolean(state.claude?.sample && state.claude.maxImages > 0);
+    chip.classList.toggle('ok', ok);
+    chip.classList.add('static');
+    fill(chip, h('span', { class: 'dot' }), !state.claude ? 'Conectando con Claude…' : ok ? 'Claude conectado' : 'Sin Claude');
+    return;
+  }
   chip.classList.toggle('ok', Boolean(state.apiKey));
   fill(chip, h('span', { class: 'dot' }), state.apiKey ? 'API key lista' : 'Añadir API key');
 }
@@ -207,6 +255,10 @@ function renderKeyChip(): void {
 async function addFiles(list: FileList | File[]): Promise<void> {
   state.error = '';
   for (const file of Array.from(list)) {
+    if (IN_CLAUDE && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) {
+      state.error = 'Aquí no se pueden enviar PDF: sube fotos o capturas de pantalla de la tabla (JPG o PNG).';
+      continue;
+    }
     try {
       state.files.push(await prepareFile(file));
     } catch (err) {
@@ -223,13 +275,25 @@ function removeFile(id: string): void {
   renderPhotoStep();
 }
 
-async function runExtraction(): Promise<void> {
-  if (!state.apiKey) {
+function setProgress(text: string): void {
+  if (text === state.progress) return;
+  state.progress = text;
+  const el = document.getElementById('progress-text');
+  if (el) el.textContent = text;
+}
+
+async function runExtraction(force = false): Promise<void> {
+  if (!IN_CLAUDE && !state.apiKey) {
     openKeyDialog();
     return;
   }
-  if (state.fixture && state.fixture.modes.length > 0 &&
-      !confirm('Ya hay un aparato en revisión. ¿Quieres sustituirlo por lo que lea la IA?')) {
+  if (IN_CLAUDE && !state.claude?.sample) {
+    state.error = 'Abre Canalia en claude.ai con tu cuenta para leer fotos con Claude.';
+    renderPhotoStep();
+    return;
+  }
+  if (!force && state.fixture && state.fixture.modes.length > 0) {
+    askConfirm('Ya hay un aparato en revisión. ¿Lo sustituyo por lo que lea la IA?', 'Sustituir', () => void runExtraction(true));
     return;
   }
   state.busy = true;
@@ -238,32 +302,40 @@ async function runExtraction(): Promise<void> {
   state.abort = new AbortController();
   renderPhotoStep();
   try {
-    // El SDK de Anthropic solo se descarga cuando hace falta.
-    const { extractFixture } = await import('./extract');
-    const result = await extractFixture({
-      apiKey: state.apiKey,
-      files: state.files,
-      manufacturer: state.hintManufacturer,
-      name: state.hintName,
-      signal: state.abort.signal,
-      onProgress: (stage, detail) => {
-        const text =
-          stage === 'sending' ? 'Enviando fotos…'
-          : stage === 'thinking' ? 'Leyendo la tabla DMX…'
-          : `Escribiendo canales… ${detail && detail !== '0' ? `${detail} leídos` : ''}`;
-        if (text !== state.progress) {
-          state.progress = text;
-          const el = document.getElementById('progress-text');
-          if (el) el.textContent = text;
-        }
-      },
-    });
+    let result: ReadResult;
+    if (IN_CLAUDE) {
+      result = await readWithClaude({
+        runtime: state.claude!,
+        images: state.files.map((f) => f.blob),
+        manufacturer: state.hintManufacturer,
+        name: state.hintName,
+        signal: state.abort.signal,
+        onProgress: setProgress,
+      });
+    } else {
+      // El SDK de Anthropic solo se descarga cuando hace falta.
+      const { extractFixture } = await import('./extract');
+      result = await extractFixture({
+        apiKey: state.apiKey,
+        files: state.files,
+        manufacturer: state.hintManufacturer,
+        name: state.hintName,
+        signal: state.abort.signal,
+        onProgress: (stage, detail) =>
+          setProgress(
+            stage === 'sending' ? 'Enviando fotos…'
+            : stage === 'thinking' ? 'Leyendo la tabla DMX…'
+            : `Escribiendo canales… ${detail && detail !== '0' ? `${detail} leídos` : ''}`,
+          ),
+      });
+    }
     state.fixture = result.fixture;
     state.notes = result.notes;
     state.lastRun = result.usage;
     state.activeMode = 0;
     state.openRanges.clear();
     state.previewMode = -1;
+    state.exportMessage = '';
     if (result.fixture.modes.length === 0) {
       state.error = 'No se ha encontrado ninguna tabla DMX en las imágenes.';
     }
@@ -274,14 +346,14 @@ async function runExtraction(): Promise<void> {
     state.busy = false;
     state.abort = null;
     renderAll();
-    if (state.fixture?.modes.length) $('step-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (state.fixture?.modes.length && !state.error) $('step-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
 function renderPhotoStep(): void {
   const step = $('step-photo');
   const fileInput = h('input', {
-    type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true,
+    type: 'file', accept: IN_CLAUDE ? 'image/jpeg,image/png,image/webp' : 'image/*,application/pdf', multiple: true, hidden: true,
     onchange: (e: Event) => {
       const input = e.target as HTMLInputElement;
       if (input.files) void addFiles(input.files);
@@ -298,7 +370,9 @@ function renderPhotoStep(): void {
   });
 
   const drop = h('div', { class: 'drop' },
-    h('p', {}, 'Arrastra aquí las fotos o el PDF de la tabla DMX. Si ocupa varias páginas, súbelas todas.'),
+    h('p', {}, IN_CLAUDE
+      ? 'Arrastra aquí las fotos de la tabla DMX. Si ocupa varias páginas, súbelas todas.'
+      : 'Arrastra aquí las fotos o el PDF de la tabla DMX. Si ocupa varias páginas, súbelas todas.'),
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'button', onclick: () => cameraInput.click(), disabled: state.busy }, 'Hacer foto'),
       h('button', { class: 'btn', type: 'button', onclick: () => fileInput.click(), disabled: state.busy }, 'Elegir archivos'),
@@ -325,13 +399,17 @@ function renderPhotoStep(): void {
       )
     : null;
 
-  const canRun = state.files.length > 0 && !state.busy;
+  const claudeMissing = IN_CLAUDE && state.claude !== null && !(state.claude.sample && state.claude.maxImages > 0);
+  const canRun = state.files.length > 0 && !state.busy && !claudeMissing;
+  const readLabel = IN_CLAUDE ? 'Leer con Claude' : state.apiKey ? 'Leer tabla DMX' : 'Añadir API key y leer';
 
   fill(step, 
     h('div', { class: 'step-head' },
       h('span', { class: 'step-num' }, '1'),
       h('h2', {}, 'Foto del manual'),
-      h('span', { class: 'hint' }, 'Que se lean bien los números: foto recta, con luz y sin reflejos.'),
+      h('span', { class: 'hint' }, IN_CLAUDE
+        ? 'Fotografía solo la tabla, recta, con luz y sin reflejos. La lectura usa tu cuenta de Claude: la primera vez te pedirá permiso.'
+        : 'Que se lean bien los números: foto recta, con luz y sin reflejos.'),
     ),
     drop,
     thumbs,
@@ -348,8 +426,7 @@ function renderPhotoStep(): void {
         })),
     ),
     h('div', { class: 'row mt' },
-      h('button', { class: 'btn primary', type: 'button', disabled: !canRun, onclick: () => void runExtraction() },
-        state.apiKey ? 'Leer tabla DMX' : 'Añadir API key y leer'),
+      h('button', { class: 'btn primary', type: 'button', disabled: !canRun, onclick: () => void runExtraction() }, readLabel),
       h('button', { class: 'btn ghost', type: 'button', disabled: state.busy, onclick: startManual }, 'Crear a mano'),
       h('button', { class: 'btn ghost', type: 'button', disabled: state.busy, onclick: loadDemo }, 'Ver un ejemplo'),
     ),
@@ -360,29 +437,37 @@ function renderPhotoStep(): void {
           h('button', { class: 'btn small', type: 'button', onclick: () => state.abort?.abort() }, 'Cancelar'),
         )
       : null,
+    claudeMissing
+      ? h('div', { class: 'callout mt' },
+          'La lectura con IA funciona al abrir Canalia en claude.ai con tu cuenta. ',
+          'Mientras tanto puedes crear el aparato a mano o ver el ejemplo.')
+      : null,
     state.error ? h('div', { class: 'callout error mt', role: 'alert' }, state.error) : null,
   );
 }
 
-function confirmReplace(): boolean {
-  return !state.fixture || state.fixture.modes.length === 0 ||
-    confirm('Se perderá el aparato que estás revisando. ¿Continuar?');
+/** Ejecuta `action` y, si ya hay un aparato en revisión, pide confirmación antes. */
+function guardReplace(action: () => void): void {
+  if (!state.fixture || state.fixture.modes.length === 0) action();
+  else askConfirm('Se perderá el aparato que estás revisando. ¿Continuar?', 'Continuar', action);
 }
 
 function startManual(): void {
-  if (!confirmReplace()) return;
-  const fx = emptyFixture();
-  fx.manufacturer = state.hintManufacturer;
-  fx.name = state.hintName;
-  fx.modes = [{ name: '1CH', channels: [emptyChannel(1)] }];
-  fx.modes[0].channels[0].attr = 'DIM';
-  fx.modes[0].channels[0].label = 'Dimmer';
-  setFixture(fx, []);
+  guardReplace(() => {
+    const fx = emptyFixture();
+    fx.manufacturer = state.hintManufacturer;
+    fx.name = state.hintName;
+    fx.modes = [{ name: '1CH', channels: [emptyChannel(1)] }];
+    fx.modes[0].channels[0].attr = 'DIM';
+    fx.modes[0].channels[0].label = 'Dimmer';
+    setFixture(fx, []);
+  });
 }
 
 function loadDemo(): void {
-  if (!confirmReplace()) return;
-  setFixture(demoFixture(), ['Esto es un ejemplo: así quedaría un cabeza móvil de 16 canales tras leer su manual.']);
+  guardReplace(() =>
+    setFixture(demoFixture(), ['Esto es un ejemplo: así quedaría un cabeza móvil de 16 canales tras leer su manual.']),
+  );
 }
 
 function setFixture(fx: Fixture, notes: string[]): void {
@@ -392,6 +477,7 @@ function setFixture(fx: Fixture, notes: string[]): void {
   state.activeMode = 0;
   state.openRanges.clear();
   state.previewMode = -1;
+  state.exportMessage = '';
   persistDraft();
   renderAll();
   $('step-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -634,14 +720,14 @@ function renderReviewStep(): void {
           })),
         h('button', {
           class: 'btn small danger', type: 'button', style: 'align-self:flex-end',
-          onclick: () => {
-            if (!confirm(`¿Borrar el modo «${mode.name}»?`)) return;
-            fx.modes.splice(state.activeMode, 1);
-            state.activeMode = Math.max(0, state.activeMode - 1);
-            persistDraft();
-            renderReviewStep();
-            renderExportStep();
-          },
+          onclick: () =>
+            askConfirm(`¿Borrar el modo «${mode.name || `Modo ${state.activeMode + 1}`}»?`, 'Borrar', () => {
+              fx.modes.splice(state.activeMode, 1);
+              state.activeMode = Math.max(0, state.activeMode - 1);
+              persistDraft();
+              renderReviewStep();
+              renderExportStep();
+            }),
         }, 'Borrar modo'),
       ),
       h('div', { class: 'table-wrap mt' },
@@ -707,6 +793,50 @@ function download(fileName: string, xml: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+interface ReadyFile {
+  fileName: string;
+  xml: string;
+}
+
+/** En claude.ai las páginas no pueden guardar .xml: se entregan dentro de un ZIP. */
+async function saveZip(files: ReadyFile[], zipName: string): Promise<void> {
+  const downloads = state.claude?.downloads;
+  if (!downloads) return;
+  const zip = createZip(files.map((f) => ({ name: f.fileName, content: f.xml })));
+  try {
+    await downloads.save({ filename: zipName, data: new Blob([zip as BlobPart], { type: 'application/zip' }) });
+    state.exportMessage = `Guardado ${zipName}. Descomprímelo y copia los XML en la librería de grandMA2.`;
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    state.exportMessage =
+      code === 'declined' ? ''
+      : code === 'rate_limited' ? 'Ya hay una descarga pendiente de confirmar.'
+      : 'No se ha podido guardar el archivo aquí. Usa «Copiar XML».';
+  }
+  renderExportStep();
+}
+
+async function copyXml(xml: string, index: number): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(xml.replace(/^\uFEFF/, ''));
+    state.exportMessage = 'XML copiado. Pégalo en un archivo .xml con el nombre que se muestra.';
+    renderExportStep();
+  } catch {
+    // Sin portapapeles: se muestra el XML seleccionado para copiarlo a mano.
+    state.previewMode = index;
+    state.exportMessage = 'No se ha podido copiar solo. El XML está seleccionado: cópialo con Ctrl+C o Cmd+C.';
+    renderExportStep();
+    const pre = document.querySelector('#step-export pre.xml');
+    if (pre) window.getSelection()?.selectAllChildren(pre);
+  }
+}
+
+function zipNameFor(fx: Fixture, files: ReadyFile[]): string {
+  if (files.length === 1) return files[0].fileName.replace(/\.xml$/, '.zip');
+  const [maker, model] = files[0].fileName.split('@');
+  return `${maker || 'canalia'}@${model || fx.name || 'fixture'}.zip`;
+}
+
 function renderExportStep(): void {
   const step = $('step-export');
   const fx = state.fixture;
@@ -714,17 +844,18 @@ function renderExportStep(): void {
   const head = h('div', { class: 'step-head' },
     h('span', { class: 'step-num' }, '3'),
     h('h2', {}, 'Descargar para grandMA2'),
-    h('span', { class: 'hint' }, 'Un archivo XML por modo DMX.'),
+    h('span', { class: 'hint' }, IN_CLAUDE ? 'Un XML por modo DMX, dentro de un ZIP.' : 'Un archivo XML por modo DMX.'),
   );
   if (!fx || fx.modes.length === 0) {
     fill(step, head, h('p', { class: 'empty' }, 'Cuando revises los canales podrás descargar los archivos aquí.'));
     return;
   }
 
+  const canSave = IN_CLAUDE ? Boolean(state.claude?.downloads) : true;
   const now = new Date();
-  const ready: { fileName: string; xml: string }[] = [];
+  const ready: ReadyFile[] = [];
   const items = fx.modes.map((mode, i) => {
-    let file: { fileName: string; xml: string } | null = null;
+    let file: ReadyFile | null = null;
     let problem = '';
     try {
       file = generateFixtureXml(fx, mode, now);
@@ -733,6 +864,14 @@ function renderExportStep(): void {
       problem = 'Tiene errores: corrígelos en el paso 2.';
     }
     const showing = state.previewMode === i && file;
+    const saveButton = !file
+      ? h('button', { class: 'btn small primary', type: 'button', disabled: true }, 'Descargar')
+      : IN_CLAUDE && !canSave
+        ? h('button', { class: 'btn small primary', type: 'button', onclick: () => void copyXml(file!.xml, i) }, 'Copiar XML')
+        : h('button', {
+            class: 'btn small primary', type: 'button',
+            onclick: () => (IN_CLAUDE ? void saveZip([file!], zipNameFor(fx, [file!])) : download(file!.fileName, file!.xml)),
+          }, IN_CLAUDE ? 'Descargar ZIP' : 'Descargar');
     return h('div', { class: 'download' },
       h('div', { class: 'file' }, file ? file.fileName : mode.name || `Modo ${i + 1}`,
         h('div', { class: 'meta' }, problem || `${mode.name} · ${footprint(mode)} canales DMX`)),
@@ -740,27 +879,34 @@ function renderExportStep(): void {
         class: 'btn small ghost', type: 'button', disabled: !file,
         onclick: () => { state.previewMode = state.previewMode === i ? -1 : i; renderExportStep(); },
       }, showing ? 'Ocultar XML' : 'Ver XML'),
-      h('button', {
-        class: 'btn small primary', type: 'button', disabled: !file,
-        onclick: () => file && download(file.fileName, file.xml),
-      }, 'Descargar'),
-      showing ? h('pre', { class: 'xml' }, file!.xml.replace(/^\uFEFF/, '')) : null,
+      IN_CLAUDE && canSave && file
+        ? h('button', { class: 'btn small ghost', type: 'button', onclick: () => void copyXml(file!.xml, i) }, 'Copiar')
+        : null,
+      saveButton,
+      showing ? h('pre', { class: 'xml', tabindex: '0' }, file!.xml.replace(/^\uFEFF/, '')) : null,
     );
   });
 
-  fill(step, 
+  const all = ready.length > 1 && canSave
+    ? h('div', { class: 'row mt' },
+        h('button', {
+          class: 'btn', type: 'button',
+          onclick: () =>
+            IN_CLAUDE
+              ? void saveZip(ready, zipNameFor(fx, ready))
+              : ready.forEach((f, i) => setTimeout(() => download(f.fileName, f.xml), i * 400)),
+        }, IN_CLAUDE ? `Descargar los ${ready.length} modos (ZIP)` : `Descargar los ${ready.length} modos`))
+    : null;
+
+  fill(step,
     head,
     h('div', { class: 'downloads' }, ...items),
-    ready.length > 1
-      ? h('div', { class: 'row mt' },
-          h('button', {
-            class: 'btn', type: 'button',
-            onclick: () => ready.forEach((f, i) => setTimeout(() => download(f.fileName, f.xml), i * 400)),
-          }, `Descargar los ${ready.length} modos`))
-      : null,
+    all,
+    state.exportMessage ? h('div', { class: 'callout mt', role: 'status' }, state.exportMessage) : null,
     h('div', { class: 'howto mt' },
       h('strong', {}, 'Cómo cargarlo en grandMA2'),
       h('ol', {},
+        IN_CLAUDE ? h('li', {}, 'Descomprime el ZIP.') : null,
         h('li', {}, 'Copia el XML en un USB, en la carpeta ', h('code', {}, 'gma2/library'),
           '. En grandMA2 onPC, en ', h('code', {}, 'C:\\ProgramData\\MA Lighting Technologies\\grandma\\gma2_V_<versión>\\library'), '.'),
         h('li', {}, 'En la consola: Setup → Patch & Fixture Schedule → Add New Fixtures → Fixture Type → Import y elige el archivo en la librería de usuario.'),
@@ -779,3 +925,11 @@ function renderAll(): void {
 
 shell();
 renderAll();
+if (IN_CLAUDE) {
+  void connectClaude().then((runtime) => {
+    state.claude = runtime;
+    renderKeyChip();
+    renderPhotoStep();
+    renderExportStep();
+  });
+}

@@ -7,6 +7,8 @@ export interface SourceFile {
   mediaType: 'image/jpeg' | 'application/pdf';
   /** Contenido en base64 (sin el prefijo data:). */
   data: string;
+  /** El archivo ya preparado (JPEG reducido o el PDF original). */
+  blob: Blob;
   /** URL para la miniatura (solo imágenes). */
   previewUrl: string | null;
   bytes: number;
@@ -45,6 +47,7 @@ export async function prepareFile(file: File): Promise<SourceFile> {
       kind: 'pdf',
       mediaType: 'application/pdf',
       data: await blobToBase64(file),
+      blob: file,
       previewUrl: null,
       bytes: file.size,
     };
@@ -83,6 +86,7 @@ export async function prepareFile(file: File): Promise<SourceFile> {
     kind: 'image',
     mediaType: 'image/jpeg',
     data: await blobToBase64(blob),
+    blob,
     previewUrl: URL.createObjectURL(blob),
     bytes: blob.size,
   };

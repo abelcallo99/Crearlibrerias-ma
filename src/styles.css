@@ -42,7 +42,18 @@ a { color: var(--amber); }
 .wrap {
   width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 0 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Franja bajo la barra de estado del móvil, del color de la cabecera */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 11;
+  background: var(--bg);
 }
 
 /* Cabecera */
@@ -51,7 +62,7 @@ a { color: var(--amber); }
   background: rgba(17, 19, 24, 0.97);
   backdrop-filter: blur(10px);
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   z-index: 10;
 }
 .top .wrap {
@@ -87,6 +98,8 @@ a { color: var(--amber); }
 .key-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .key-chip.ok .dot { background: var(--ok); }
 .key-chip:hover { border-color: var(--amber); }
+.key-chip.static { cursor: default; }
+.key-chip.static:hover { border-color: var(--line-strong); }
 
 /* Intro */
 .hero { padding: 36px 0 8px; }
@@ -204,7 +217,7 @@ input:focus-visible, select:focus-visible, button:focus-visible {
   outline: 2px solid var(--amber);
   outline-offset: 1px;
 }
-input[type='number'] { font-family: var(--font-mono); }
+input[type='number'] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .row.end { justify-content: flex-end; }
@@ -400,7 +413,28 @@ dialog h3 { font-family: var(--font-display); margin: 0 0 8px; font-size: 20px; 
 dialog p { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
 
-footer { color: var(--faint); font-size: 12px; padding: 10px 0 40px; }
+footer { color: var(--faint); font-size: 12px; padding-block: 10px 40px; }
+
+/* Confirmación dentro de la página */
+.confirm-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--panel-2);
+  border-top: 1px solid var(--amber);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+.confirm-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+}
 
 @media (max-width: 640px) {
   .brand-tag { display: none; }
