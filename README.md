@@ -67,6 +67,8 @@ La lectura de la foto usa el modelo `claude-opus-5-5` de Anthropic con visión. 
 2. En la consola: *Setup → Patch & Fixture Schedule → Add New Fixtures → Fixture Type → Import* y elige el archivo en la librería de usuario.
 3. Abre el fixture type en el **Fixture Type Editor** y compruébalo antes de usarlo en un show.
 
+**Controlar onPC con Claude.** [`docs/grandma2-mcp-windows.md`](docs/grandma2-mcp-windows.md) explica cómo conectar Claude con grandMA2 onPC mediante el MCP [gma2-mcp](https://github.com/chienchuanw/gma2-mcp). El instalador [`windows/instalar.ps1`](windows/instalar.ps1) lo deja listo con un solo comando.
+
 ## Qué genera
 
 El XML sigue la estructura de los fixture types que exporta una grandMA2 3.9.60. Se ha comparado con exportaciones reales de consolas.

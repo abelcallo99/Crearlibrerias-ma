@@ -20,14 +20,17 @@ Decisiones del usuario (no volver a preguntarlas):
 - Código completo en `src/`; `npm test` pasa (11 pruebas) y `npm run build` compila.
 - Versión publicada en claude.ai, sin API key: <https://claude.ai/artifact/9STLEqs1iHisZoPBKbHEXE>. Se regenera con `npm run build:claude` (`dist-claude/canalia.html`) y se vuelve a publicar en la misma dirección.
 - `ejemplos/`: tres XML de prueba para importar en onPC (ver `ejemplos/LEEME.md`).
-- `docs/grandma2-mcp-windows.md`: guía para conectar Claude con grandMA2 onPC por Telnet usando [gma2-mcp](https://github.com/chienchuanw/gma2-mcp).
+- `docs/grandma2-mcp-windows.md`: guía para conectar Claude con grandMA2 onPC por Telnet usando [gma2-mcp](https://github.com/chienchuanw/gma2-mcp) (rama `dev`, revisada en el commit `35fea2a`). Incluye las órdenes de importación y patch sacadas del manual de grandMA2 3.9. El manual en PDF viene dentro de gma2-mcp: `doc/2024-09-30_grandMA2_User_Manual_v3-9.pdf`.
+- `windows/instalar.ps1`: instalador de un solo comando. Instala uv y Python 3.12, descarga gma2-mcp y ejecuta `uv sync`. Luego lo registra en Claude Desktop (con copia de seguridad del JSON) y en Claude Code, copia `ejemplos/*.xml` a la librería de onPC y comprueba el puerto 30000. El archivo es solo ASCII a propósito, para Windows PowerShell 5.1.
 - `patch/plan-universos.csv`: plan de patch del usuario (ver abajo).
 
 **Sin comprobar todavía:**
 
 - La lectura con una cuenta o API key reales y una foto de verdad (solo se probó simulando la respuesta).
 - La importación de los XML en una grandMA2 real.
-- La guía del MCP en Windows. La ruta de Telnet (*Setup → Console → Global Settings → Telnet: Login Enabled*) es de memoria.
+- `windows/instalar.ps1` y la guía en Windows: no se pudieron ejecutar desde la nube. Tampoco se arrancó gma2-mcp; solo se revisó su código y su README.
+
+La ruta de Telnet sí está comprobada en el manual 3.9 (apartado 34.4): *Setup → Console → Global Settings → Telnet = Login Enabled*. Puerto 30000; el 30001 es solo de lectura.
 
 ## El equipo del usuario
 
@@ -51,15 +54,15 @@ Tiene grandMA2 onPC instalado en un PC con Windows y quiere que Claude trabaje d
 
 1. **Duda abierta:** en la hoja, los triángulos 3 a 6 del universo 4 aparecen con DMX 481 y sin canales. Con 64 canales, el 3.º ya no cabría en ese universo. ¿Son solo 2 triángulos, o los otros 4 van en otro universo?
 2. **Fotos de las tablas DMX** de los 11 tipos (el modo que usa cada uno). Empezar por los que más se repiten: Stormys, Cabeza Europro, Tachos y Cabeza 7R. Con cada foto se genera su fixture type.
-3. **Patch automático** (ofrecido, sin confirmar): que Canalia genere el patch completo de los 55 aparatos a partir de `patch/plan-universos.csv`, o hacerlo con el MCP de grandMA2.
+3. **Patch automático** (ofrecido, sin confirmar): que Canalia genere el patch completo de los 55 aparatos a partir de `patch/plan-universos.csv`, o hacerlo con el MCP de grandMA2. Todos los grupos van seguidos, así que, con los aparatos ya creados en el show, cada grupo se parchea con una orden: `Assign Fixture <primero> Thru <último> At DMX <universo>.<dirección>` (manual 3.9, 14.7). No usar `Assign DMX … At Fixture …`: eso añade un multipatch. Los Fixture ID todavía no están decididos.
 
 ## En el PC del usuario (Windows)
 
 Orden sugerido para una sesión local:
 
 1. Comprobar que grandMA2 onPC abre y crear un show de prueba.
-2. Seguir `docs/grandma2-mcp-windows.md`: activar Telnet, instalar `uv` y Python 3.12, descargar gma2-mcp y registrarlo. Probar con «lista los fixtures del show».
-3. Copiar `ejemplos/*.xml` a la carpeta `library` de onPC (`C:\ProgramData\MA Lighting Technologies\grandma\gma2_V_<versión>\library`), importarlos y anotar cualquier error exacto para corregir `src/ma2xml.ts`.
+2. Ejecutar `windows/instalar.ps1` (o seguir `docs/grandma2-mcp-windows.md` a mano). Después: activar Telnet en onPC, reiniciar Claude Desktop y probar con «lista los fixtures del show».
+3. Importar los XML de prueba, que el instalador deja en `C:\ProgramData\MA Lighting Technologies\grandma\gma2_V_<versión>\library`, y anotar cualquier error exacto para corregir `src/ma2xml.ts`.
 4. Con las librerías reales hechas, parchear según `patch/plan-universos.csv`.
 
 ## Comandos
