@@ -1,0 +1,39 @@
+{
+  "name": "canalia",
+  "version": "0.1.0",
+  "description": "Canalia: librerías (fixture types) de grandMA2 a partir de una foto del manual",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p . && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abelcallo99/Crearlibrerias-ma.git"
+  },
+  "keywords": [
+    "grandMA2",
+    "DMX",
+    "fixture",
+    "iluminación"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abelcallo99/Crearlibrerias-ma/issues"
+  },
+  "homepage": "https://github.com/abelcallo99/Crearlibrerias-ma#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "fast-xml-parser": "^5.12.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  },
+  "private": true,
+  "type": "module"
+}

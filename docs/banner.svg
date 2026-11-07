@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" width="960" height="240" role="img" aria-labelledby="t">
+  <title id="t">Canalia: librerías grandMA2 desde una foto del manual</title>
+  <rect width="960" height="240" rx="24" fill="#111318"/>
+  <g transform="translate(64 56) scale(2)">
+    <rect width="64" height="64" rx="14" fill="#16181D"/>
+    <path d="M9 12a3 3 0 0 1 3-3h17l8 8v35a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3z" fill="#F2ECE1"/>
+    <path d="M29 9v6a2 2 0 0 0 2 2h6z" fill="#CFC6B6"/>
+    <rect x="13.5" y="19.5" width="11" height="2.8" rx="1.4" fill="#8C8475"/>
+    <g stroke-linecap="round" stroke-width="3.2">
+      <g stroke="#B9B0A0">
+        <line x1="14.5" y1="28" x2="25" y2="28"/><line x1="14.5" y1="35" x2="25" y2="35"/>
+        <line x1="14.5" y1="42" x2="25" y2="42"/><line x1="14.5" y1="49" x2="25" y2="49"/>
+      </g>
+      <g stroke="#3B3F49">
+        <line x1="30" y1="28" x2="56" y2="28"/><line x1="30" y1="35" x2="56" y2="35"/>
+        <line x1="30" y1="42" x2="56" y2="42"/><line x1="30" y1="49" x2="56" y2="49"/>
+      </g>
+      <g stroke="#FFB21E">
+        <line x1="30" y1="28" x2="50" y2="28"/><line x1="30" y1="35" x2="41" y2="35"/>
+        <line x1="30" y1="42" x2="53" y2="42"/><line x1="30" y1="49" x2="45" y2="49"/>
+      </g>
+    </g>
+    <g fill="#FFFFFF" stroke="#16181D" stroke-width="1.5">
+      <rect x="47.5" y="23.75" width="5" height="8.5" rx="1.6"/><rect x="38.5" y="30.75" width="5" height="8.5" rx="1.6"/>
+      <rect x="50.5" y="37.75" width="5" height="8.5" rx="1.6"/><rect x="42.5" y="44.75" width="5" height="8.5" rx="1.6"/>
+    </g>
+  </g>
+  <text x="232" y="128" fill="#ECEBE6" font-family="'Space Grotesk', 'Helvetica Neue', Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-1.5">Canalia</text>
+  <text x="235" y="170" fill="#9A9EA8" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="24">Librerías <tspan fill="#FFB21E">grandMA2</tspan> desde una foto del manual</text>
+</svg>
